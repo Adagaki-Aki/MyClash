@@ -17,6 +17,8 @@
  * 9. 兼容 proxy-providers：存在代理提供器时，节点组通过 include-all-providers 纳入提供器节点。
  * 10. 默认关闭 TUN / NTP / LAN / IPv6，保留规则模式、节点选择持久化和本地 API。
  * 11. Bettbox 兼容：GLOBAL 挂接业务分流策略组，避免规则模式 UI 隐藏分流组。
+ * 12. 全局统一分流：所有代理/直连类规则统一指向 GLOBAL，GLOBAL 的当前选择决定最终出口。
+ * 13. AdBlock / 国外 QUIC 等拒绝类逻辑仍可保留 REJECT 行为。
  */
 
 const Compatible_With_Bettbox = { ruleOptionsEnable: true };
@@ -61,14 +63,14 @@ const ruleOptionsEnable = {
 
 // ==================== 前置规则 ====================
 const prefixRules = [
-  'RULE-SET,private,直连',
-  'RULE-SET,geolocation-cn,直连',
-  'RULE-SET,epicgames,直连',
-  'RULE-SET,nvidia_cn,直连',
-  'RULE-SET,apple_cn,直连',
-  'RULE-SET,microsoft_cn,直连',
-  'DOMAIN,fsend.cn,直连',
-  'DOMAIN,international-gfe.download.nvidia.com,直连',
+  'RULE-SET,private,GLOBAL',
+  'RULE-SET,geolocation-cn,GLOBAL',
+  'RULE-SET,epicgames,GLOBAL',
+  'RULE-SET,nvidia_cn,GLOBAL',
+  'RULE-SET,apple_cn,GLOBAL',
+  'RULE-SET,microsoft_cn,GLOBAL',
+  'DOMAIN,fsend.cn,GLOBAL',
+  'DOMAIN,international-gfe.download.nvidia.com,GLOBAL',
 ];
 
 // ==================== 自建节点（默认不启用） ====================
@@ -1013,16 +1015,24 @@ function buildFunctionalGroups(filteredProxies, customizeInfo, config) {
   for (const svc of orderedServiceConfigs) {
     if (!ruleOptionsEnable[svc.name]) continue;
 
-    rules.push(...(svc.rules || []));
+    // 统一分流：所有“代理/直连选择类”规则最终都交给 GLOBAL。
+    // GLOBAL 当前选什么，命中的业务规则就跟随什么。
+    const globalizedRules = (svc.rules || []).map((rule) => {
+      const parts = rule.split(',');
+      if (parts.length >= 3) parts[2] = 'GLOBAL';
+      return parts.join(',');
+    });
+    rules.push(...globalizedRules);
 
-    // Steam 必须优先于 games_cn。否则 games_cn 中的 steamserver.net 等规则
-    // 会提前命中直连，导致 Steam 策略组（如香港/日本节点）失效。
+    // Steam 的 games_cn 也统一交给 GLOBAL，不再单独直连。
+    // 这样 GLOBAL 的选择才真正成为全部规则的最终出口。
     if (svc.name === 'Steam') {
-      rules.push('RULE-SET,games_cn,直连');
+      rules.push('RULE-SET,games_cn,GLOBAL');
     }
 
     Object.assign(finalRuleProviders, svc.providers || {});
 
+    // AdBlock 仍保留独立策略组，仅用于页面展示/可扩展性；实际规则也统一落到 GLOBAL。
     if (svc.reject) {
       groups.push({
         ...selectBaseOption,
@@ -1053,7 +1063,8 @@ function buildFunctionalGroups(filteredProxies, customizeInfo, config) {
       continue;
     }
 
-    // 普通分流组：手动选择具体节点；存在 provider 时同时纳入 provider 节点。
+    // 保留原业务策略组，让 Bettbox/Clash Verge 仍能显示和手动管理；
+    // 但规则不再指向这些组，而是统一指向 GLOBAL。
     const serviceProxies = svc.direct
       ? ['节点选择', '直连', ...allProxyNames]
       : ['节点选择', ...allProxyNames];
@@ -1093,7 +1104,8 @@ function buildFunctionalGroups(filteredProxies, customizeInfo, config) {
   // Bettbox 兼容：Bettbox 的规则模式界面会依据 GLOBAL 的可达策略组
   // 构建可展示的分流策略组列表。这里必须把业务分流组挂到 GLOBAL，
   // 否则 Bettbox 可能只显示「直连分流」，而 Clash Verge 仍能正常显示。
-  // 注意：这会让 GLOBAL 本身可以切换到业务分流组；这是 Bettbox 兼容所需的取舍。
+  // 注意：业务分流组仅保留为 Bettbox/Clash Verge 的可见策略组；实际规则统一指向 GLOBAL。
+  // GLOBAL 的当前选择因此成为所有业务规则的最终出口。
   const globalGroup = {
     ...selectBaseOption,
     name: 'GLOBAL',
@@ -1183,10 +1195,10 @@ function buildConfig(config, inheritOriginalConfig) {
     ...prefixRules,
     ...(ruleOptionsEnable.屏蔽国外QUIC ? blockForeignQuic : []),
     ...functionalRules,
-    'RULE-SET,geolocation-!cn,节点选择',
-    'RULE-SET,cn_ip,直连',
-    'RULE-SET,private_ip,直连',
-    'MATCH,漏网之鱼',
+    'RULE-SET,geolocation-!cn,GLOBAL',
+    'RULE-SET,cn_ip,GLOBAL',
+    'RULE-SET,private_ip,GLOBAL',
+    'MATCH,GLOBAL',
   ];
 
   return newConfig;
