@@ -1093,8 +1093,7 @@ function buildFunctionalGroups(filteredProxies, customizeInfo, config) {
     ...selectBaseOption,
     name: 'GLOBAL',
     proxies: [
-      ...serviceGroupNames,
-      '节点选择',
+      ...allProxyNames,
       ...(chainGroup ? [chainGroup.name] : []),
       '直连',
     ],
