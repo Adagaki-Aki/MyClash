@@ -16,9 +16,6 @@
  * 重要：本版不创建 url-test / load-balance，不做自动测速，不做自动故障转移。
  * 9. 兼容 proxy-providers：存在代理提供器时，节点组通过 include-all-providers 纳入提供器节点。
  * 10. 默认关闭 TUN / NTP / LAN / IPv6，保留规则模式、节点选择持久化和本地 API。
- * 11. Bettbox 兼容：GLOBAL 挂接业务分流策略组，避免规则模式 UI 隐藏分流组。
- * 12. 全局统一分流：所有代理/直连类规则统一指向 GLOBAL，GLOBAL 的当前选择决定最终出口。
- * 13. AdBlock / 国外 QUIC 等拒绝类逻辑仍可保留 REJECT 行为。
  */
 
 const Compatible_With_Bettbox = { ruleOptionsEnable: true };
@@ -63,14 +60,14 @@ const ruleOptionsEnable = {
 
 // ==================== 前置规则 ====================
 const prefixRules = [
-  'RULE-SET,private,GLOBAL',
-  'RULE-SET,geolocation-cn,GLOBAL',
-  'RULE-SET,epicgames,GLOBAL',
-  'RULE-SET,nvidia_cn,GLOBAL',
-  'RULE-SET,apple_cn,GLOBAL',
-  'RULE-SET,microsoft_cn,GLOBAL',
-  'DOMAIN,fsend.cn,GLOBAL',
-  'DOMAIN,international-gfe.download.nvidia.com,GLOBAL',
+  'RULE-SET,private,直连',
+  'RULE-SET,geolocation-cn,直连',
+  'RULE-SET,epicgames,直连',
+  'RULE-SET,nvidia_cn,直连',
+  'RULE-SET,apple_cn,直连',
+  'RULE-SET,microsoft_cn,直连',
+  'DOMAIN,fsend.cn,直连',
+  'DOMAIN,international-gfe.download.nvidia.com,直连',
 ];
 
 // ==================== 自建节点（默认不启用） ====================
@@ -275,7 +272,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/MiToverG422/Qure@master/IconSet/Color/fcm.png',
-    rules: ['RULE-SET,googlefcm,FCM'],
+    rules: ['RULE-SET,googlefcm,GLOBAL'],
   },
   {
     name: 'YouTube',
@@ -288,7 +285,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/YouTube.png',
-    rules: ['RULE-SET,youtube,YouTube'],
+    rules: ['RULE-SET,youtube,GLOBAL'],
   },
   {
     name: 'Google',
@@ -307,7 +304,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Google_Search.png',
-    rules: ['RULE-SET,google,Google', 'RULE-SET,google_ip,Google,no-resolve'],
+    rules: ['RULE-SET,google,GLOBAL', 'RULE-SET,google_ip,GLOBAL,no-resolve'],
   },
   {
     name: 'AI',
@@ -320,7 +317,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/ChatGPT.png',
-    rules: ['RULE-SET,ai,AI'],
+    rules: ['RULE-SET,ai,GLOBAL'],
   },
   {
     name: 'Microsoft',
@@ -341,7 +338,7 @@ const serviceConfigs = [
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Microsoft.png',
     // MyClash 原规则这里指向「默认代理」；整合版已改为唯一节点入口「节点选择」
-    rules: ['RULE-SET,github,节点选择', 'RULE-SET,microsoft,Microsoft'],
+    rules: ['RULE-SET,github,GLOBAL', 'RULE-SET,microsoft,GLOBAL'],
   },
   {
     name: 'Apple',
@@ -355,7 +352,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Apple.png',
-    rules: ['RULE-SET,apple,Apple'],
+    rules: ['RULE-SET,apple,GLOBAL'],
   },
   {
     name: 'Telegram',
@@ -374,7 +371,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Telegram.png',
-    rules: ['RULE-SET,telegram,Telegram', 'RULE-SET,telegram_ip,Telegram,no-resolve'],
+    rules: ['RULE-SET,telegram,GLOBAL', 'RULE-SET,telegram_ip,GLOBAL,no-resolve'],
   },
   {
     name: 'Steam',
@@ -394,7 +391,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Steam.png',
-    rules: ['RULE-SET,steam,Steam', 'RULE-SET,steam_ip,Steam,no-resolve'],
+    rules: ['RULE-SET,steam,GLOBAL', 'RULE-SET,steam_ip,GLOBAL,no-resolve'],
   },
   {
     name: 'TikTok',
@@ -413,7 +410,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/TikTok.png',
-    rules: ['RULE-SET,tiktok,TikTok', 'RULE-SET,tiktok_ip,TikTok,no-resolve'],
+    rules: ['RULE-SET,tiktok,GLOBAL', 'RULE-SET,tiktok_ip,GLOBAL,no-resolve'],
   },
   {
     name: 'Twitter',
@@ -432,7 +429,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Twitter.png',
-    rules: ['RULE-SET,twitter,Twitter', 'RULE-SET,twitter_ip,Twitter,no-resolve'],
+    rules: ['RULE-SET,twitter,GLOBAL', 'RULE-SET,twitter_ip,GLOBAL,no-resolve'],
   },
   {
     name: 'Instagram',
@@ -445,7 +442,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Instagram.png',
-    rules: ['RULE-SET,instagram,Instagram'],
+    rules: ['RULE-SET,instagram,GLOBAL'],
   },
   {
     name: 'Netflix',
@@ -464,7 +461,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Netflix.png',
-    rules: ['RULE-SET,netflix,Netflix', 'RULE-SET,netflix_ip,Netflix,no-resolve'],
+    rules: ['RULE-SET,netflix,GLOBAL', 'RULE-SET,netflix_ip,GLOBAL,no-resolve'],
   },
   {
     name: 'Emby',
@@ -485,18 +482,18 @@ const serviceConfigs = [
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Emby.png',
     rules: [
-      'RULE-SET,emby,Emby',
-      'RULE-SET,emos,Emby',
-      'DOMAIN-SUFFIX,mb3admin.com,Emby',
-      'DOMAIN-SUFFIX,nubebelle.com,Emby',
-      'DOMAIN-KEYWORD,emby,Emby',
-      'PROCESS-NAME,com.mb.android,Emby',
-      'PROCESS-NAME,tv.emby.embyatv,Emby',
-      'PROCESS-NAME,com.hush.yamby,Emby',
-      'PROCESS-NAME,com.jellycine.app,Emby',
-      'PROCESS-NAME,com.mountains.hills,Emby',
-      'PROCESS-NAME,RodelPlayer.App.exe,Emby',
-      'PROCESS-NAME,com.feifeiduck.capyplayer,Emby',
+      'RULE-SET,emby,GLOBAL',
+      'RULE-SET,emos,GLOBAL',
+      'DOMAIN-SUFFIX,mb3admin.com,GLOBAL',
+      'DOMAIN-SUFFIX,nubebelle.com,GLOBAL',
+      'DOMAIN-KEYWORD,emby,GLOBAL',
+      'PROCESS-NAME,com.mb.android,GLOBAL',
+      'PROCESS-NAME,tv.emby.embyatv,GLOBAL',
+      'PROCESS-NAME,com.hush.yamby,GLOBAL',
+      'PROCESS-NAME,com.jellycine.app,GLOBAL',
+      'PROCESS-NAME,com.mountains.hills,GLOBAL',
+      'PROCESS-NAME,RodelPlayer.App.exe,GLOBAL',
+      'PROCESS-NAME,com.feifeiduck.capyplayer,GLOBAL',
     ],
   },
   {
@@ -511,7 +508,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/lige47/QuanX-icon-rule@main/icon/03CNSoft/pikpak.png',
-    rules: ['RULE-SET,pikpak,PikPak'],
+    rules: ['RULE-SET,pikpak,GLOBAL'],
   },
   {
     name: 'Spotify',
@@ -531,7 +528,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Spotify.png',
-    rules: ['RULE-SET,spotify,Spotify', 'RULE-SET,spotify_ip,Spotify,no-resolve'],
+    rules: ['RULE-SET,spotify,GLOBAL', 'RULE-SET,spotify_ip,GLOBAL,no-resolve'],
   },
   {
     name: 'Crypto',
@@ -544,7 +541,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/lige47/QuanX-icon-rule@main/icon/04ProxySoft/Bitcoin.png',
-    rules: ['RULE-SET,cryptocurrency,Crypto'],
+    rules: ['RULE-SET,cryptocurrency,GLOBAL'],
   },
   {
     name: 'EHentai',
@@ -557,7 +554,7 @@ const serviceConfigs = [
       },
     },
     icon: 'https://fastly.jsdelivr.net/gh/lige47/QuanX-icon-rule@main/icon/04ProxySoft/exhentai.png',
-    rules: ['RULE-SET,ehentai,EHentai'],
+    rules: ['RULE-SET,ehentai,GLOBAL'],
   },
   {
     name: 'AdBlock',
@@ -591,7 +588,7 @@ serviceConfigs.push({
   name: 'FANZA',
   providers: fanzaRuleProvider,
   icon: 'https://fastly.jsdelivr.net/gh/Adagaki-Aki/my-website@main/FANZA_logo.svg.png',
-  rules: ['RULE-SET,fanza,FANZA'],
+  rules: ['RULE-SET,fanza,GLOBAL'],
   fanza: true,
 });
 
@@ -1015,24 +1012,16 @@ function buildFunctionalGroups(filteredProxies, customizeInfo, config) {
   for (const svc of orderedServiceConfigs) {
     if (!ruleOptionsEnable[svc.name]) continue;
 
-    // 统一分流：所有“代理/直连选择类”规则最终都交给 GLOBAL。
-    // GLOBAL 当前选什么，命中的业务规则就跟随什么。
-    const globalizedRules = (svc.rules || []).map((rule) => {
-      const parts = rule.split(',');
-      if (parts.length >= 3) parts[2] = 'GLOBAL';
-      return parts.join(',');
-    });
-    rules.push(...globalizedRules);
+    rules.push(...(svc.rules || []));
 
-    // Steam 的 games_cn 也统一交给 GLOBAL，不再单独直连。
-    // 这样 GLOBAL 的选择才真正成为全部规则的最终出口。
+    // Steam 必须优先于 games_cn。否则 games_cn 中的 steamserver.net 等规则
+    // 会提前命中直连，导致 Steam 策略组（如香港/日本节点）失效。
     if (svc.name === 'Steam') {
-      rules.push('RULE-SET,games_cn,GLOBAL');
+      rules.push('RULE-SET,games_cn,直连');
     }
 
     Object.assign(finalRuleProviders, svc.providers || {});
 
-    // AdBlock 仍保留独立策略组，仅用于页面展示/可扩展性；实际规则也统一落到 GLOBAL。
     if (svc.reject) {
       groups.push({
         ...selectBaseOption,
@@ -1063,8 +1052,7 @@ function buildFunctionalGroups(filteredProxies, customizeInfo, config) {
       continue;
     }
 
-    // 保留原业务策略组，让 Bettbox/Clash Verge 仍能显示和手动管理；
-    // 但规则不再指向这些组，而是统一指向 GLOBAL。
+    // 普通分流组：手动选择具体节点；存在 provider 时同时纳入 provider 节点。
     const serviceProxies = svc.direct
       ? ['节点选择', '直连', ...allProxyNames]
       : ['节点选择', ...allProxyNames];
@@ -1101,18 +1089,13 @@ function buildFunctionalGroups(filteredProxies, customizeInfo, config) {
   if (chainGroup) groups.push(chainGroup);
   groups.push(directGroup);
 
-  // Bettbox 兼容：Bettbox 的规则模式界面会依据 GLOBAL 的可达策略组
-  // 构建可展示的分流策略组列表。这里必须把业务分流组挂到 GLOBAL，
-  // 否则 Bettbox 可能只显示「直连分流」，而 Clash Verge 仍能正常显示。
-  // 注意：业务分流组仅保留为 Bettbox/Clash Verge 的可见策略组；实际规则统一指向 GLOBAL。
-  // GLOBAL 的当前选择因此成为所有业务规则的最终出口。
+  // Bettbox 实验版：GLOBAL 本身只保留「节点选择 / 直连」。
+  // 业务分流组仍然生成，以便在规则界面保留策略组定义；实际规则统一指向 GLOBAL。
   const globalGroup = {
     ...selectBaseOption,
     name: 'GLOBAL',
     proxies: [
-      ...serviceGroupNames,
       '节点选择',
-      ...(chainGroup ? [chainGroup.name] : []),
       '直连',
     ],
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Global.png',
