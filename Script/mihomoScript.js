@@ -890,14 +890,13 @@ function buildFunctionalGroups(filteredProxies, customizeInfo) {
   if (chainGroup) groups.push(chainGroup);
   groups.push(directGroup);
 
-  // 保留 MyClash 的 GLOBAL / 漏网之鱼，只去掉已经被删除的默认代理和地区节点组。
-  // GLOBAL 放到全部用户可见分流组之后，确保开头严格保持「节点选择 → FANZA → Steam → AI → EHentai → 其余分流」的直观顺序。
+  // GLOBAL 模式只显示全部实际节点和直连，不显示服务分流组。
+  // 切换到「全局」后，可直接选择任意节点或直连。
   const globalGroup = {
     ...selectBaseOption,
     name: 'GLOBAL',
     proxies: [
-      ...serviceGroupNames,
-      '节点选择',
+      ...allProxyNames,
       ...(chainGroup ? [chainGroup.name] : []),
       '直连',
     ],
