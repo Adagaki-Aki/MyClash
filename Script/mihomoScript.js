@@ -10,11 +10,13 @@
  *    PikPak / Spotify / Crypto / EHentai / AdBlock
  * 5. 加入用户原脚本 FANZA 规则集，并提供 FANZA 的日本节点快捷选择
  * 6. 保留 MyClash 的节点标准化、节点过滤、dialer-proxy 修复、IP 版本偏好
- * 7. 自建版采用简化 DNS：保留 MyClash 的国内/国外 DNS 分流与 fake-ip，但删除私有 DNS / Hosts -> proxy.server 逻辑
+ * 7. 保留 MyClash 的 DNS / Hosts / 私有 DNS / fake-ip / Hosts -> proxy.server 改写逻辑
  * 8. 保留 MyClash 的国内外规则、国外 QUIC 拦截及服务 Rule Providers
- * 9. 适用于公网 IP 直连的 VLESS Reality / Hysteria2 / SOCKS5 等自建节点；不接管机场 proxy-providers
  *
  * 重要：本版不创建 url-test / load-balance，不做自动测速，不做自动故障转移。
+ * 9. 兼容 proxy-providers：存在代理提供器时，节点组通过 include-all-providers 纳入提供器节点。
+ * 10. 默认关闭 TUN / NTP / LAN / IPv6，保留规则模式、节点选择持久化和本地 API。
+ * 11. Bettbox 兼容：GLOBAL 挂接业务分流策略组，避免规则模式 UI 隐藏分流组。
  */
 
 const Compatible_With_Bettbox = { ruleOptionsEnable: true };
@@ -84,8 +86,11 @@ const blockForeignQuic = [
 
 // ==================== 直连节点 ====================
 const directProxies = [
-  { name: '🇨🇳 直连', type: 'direct' },
+  { name: '🇨🇳 直连 | 双栈', type: 'direct' },
+  { name: '🇨🇳 直连 | IPv4优先', type: 'direct', 'ip-version': 'ipv4-prefer' },
+  { name: '🇨🇳 直连 | IPv6优先', type: 'direct', 'ip-version': 'ipv6-prefer' },
   { name: '🇨🇳 直连 | 仅IPv4', type: 'direct', 'ip-version': 'ipv4' },
+  { name: '🇨🇳 直连 | 仅IPv6', type: 'direct', 'ip-version': 'ipv6' },
 ];
 
 // ==================== 地区识别：保留用于节点标准化 / FANZA 快捷筛选，不生成地区代理组 ====================
@@ -244,6 +249,14 @@ const nodeSelectGroup = {
   name: '节点选择',
   icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Static.png',
 };
+
+function hasProxyProviders(config) {
+  return !!(config?.['proxy-providers'] && typeof config['proxy-providers'] === 'object' && Object.keys(config['proxy-providers']).length);
+}
+
+function getProxyProviderNames(config) {
+  return hasProxyProviders(config) ? Object.keys(config['proxy-providers']) : [];
+}
 
 // ==================== 服务分流配置 ====================
 const serviceConfigs = [
@@ -658,8 +671,8 @@ function filterAndNormalizeProxies(config) {
   const normalizedProxyNames = new Set(normalizedProxies.map((p) => p.name));
   const filteredProxies = normalizedProxies.map((proxy) => fixDialerProxy(proxy, renameMap, normalizedProxyNames));
 
-  if (!filteredProxies.length) {
-    throw new Error('配置文件中未找到任何代理节点，请使用机场提供的配置文件进行覆写');
+  if (!filteredProxies.length && !hasProxyProviders(config)) {
+    throw new Error('配置文件中未找到任何代理节点或 proxy-providers，请使用机场提供的配置文件进行覆写');
   }
 
   const ipVersionPreference = getIpVersionPreference();
@@ -707,71 +720,256 @@ function buildCustomizeGroups(filteredProxies, customizeList = customizeProxies)
   return { customProxies, customProxyNames, customGroup };
 }
 
-// ==================== DNS / Hosts（自建节点专用） ====================
-// 自建版说明：
-// 1. 自建节点的 server 均为公网 IP，不依赖机场私有 DNS。
-// 2. 不读取/继承机场 proxy-server-nameserver。
-// 3. 不执行 Hosts -> proxy.server 改写。
-// 4. 不合并机场 hosts，避免把不存在的机场 DNS/Hosts 逻辑带入自建配置。
-// 5. 保留 MyClash 的国内/国外分流 DNS 思路。
-// 6. 节点本身直接连接 IP，因此不需要 proxy-server-nameserver。
-
+// ==================== DNS / Hosts ====================
+const commonDnsList = [
+  '223.5.5.5','223.6.6.6','119.29.29.29','1.12.12.12','120.53.53.53','114.114.114.114','180.76.76.76','1.2.4.8','116.116.116.116','101.226.4.6','123.125.81.6','180.184.1.1','180.184.2.2',
+  '2400:3200::1','2400:3200:baba::1','2402:4e00::','2400:da00::6666',
+  '1.1.1.1','1.0.0.1','8.8.8.8','8.8.4.4','9.9.9.9','149.112.112.112','208.67.222.222','208.67.220.220','94.140.14.14','94.140.15.15','76.76.2.0','76.76.10.0','185.228.168.9','185.228.169.9','77.88.8.8','77.88.8.1','156.154.70.1','156.154.71.1',
+  '2606:4700:4700::1111','2606:4700:4700::1001','2001:4860:4860::8888','2001:4860:4860::8844','2620:fe::fe','2620:fe::9','2620:119:35::35','2620:119:53::53','2a10:50c0::bad1:ff','2a10:50c0::bad2:ff','2a10:50c0::ad1:ff','2a10:50c0::ad2:ff','2a0d:2a00:1::2','2a0d:2a00:2::2','2a02:6b8::feed:0ff','2a02:6b8:0:1::feed:0ff','2610:a1:1018::1','2610:a1:1019::53',
+  'alidns','doh.pub','dot.pub','dns.pub','dnspod','dns.baidu','dns.google','dns.cloudflare','cloudflare-dns','quad9','opendns','nextdns','adguard',
+];
+const commonDnsRegex = new RegExp(commonDnsList.map((dns) => dns.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i');
 const chinaDNS = ['223.5.5.5#DIRECT', '119.29.29.29#DIRECT'];
-const chinaDohDNS = [
-  'https://223.5.5.5/dns-query#DIRECT',
-  'https://1.12.12.12/dns-query#DIRECT',
-];
-const foreignDNS = [
-  'https://cloudflare-dns.com/dns-query#节点选择',
-  'https://dns.google/dns-query#节点选择',
-];
+const chinaDohDNS = ['https://223.5.5.5/dns-query#DIRECT', 'https://1.12.12.12/dns-query#DIRECT'];
+const foreignDNS = ['https://cloudflare-dns.com/dns-query#节点选择', 'https://dns.google/dns-query#节点选择'];
+
+function hostSpecificity(pattern) {
+  if (pattern.startsWith('+.')) return 2;
+  if (pattern.startsWith('.')) return 1;
+  if (pattern.includes('*')) return 0;
+  return 3;
+}
+
+function matchDomainPattern(pattern, domains) {
+  pattern = pattern.toLowerCase();
+  if (!pattern.includes('*') && !pattern.startsWith('+.') && !pattern.startsWith('.')) {
+    return typeof domains === 'string'
+      ? domains.toLowerCase() === pattern
+      : [...domains].some((d) => d.toLowerCase() === pattern);
+  }
+
+  const domainList = typeof domains === 'string' ? [domains.toLowerCase()] : [...domains].map((d) => d.toLowerCase());
+  if (pattern.startsWith('+.')) {
+    const suffix = pattern.slice(2);
+    return domainList.some((domain) => domain === suffix || domain.endsWith(`.${suffix}`));
+  }
+  if (pattern.startsWith('.')) {
+    const suffix = pattern.slice(1);
+    return domainList.some((domain) => domain !== suffix && domain.endsWith(`.${suffix}`));
+  }
+
+  const patternParts = pattern.split('.');
+  return domainList.some((domain) => {
+    const domainParts = domain.split('.');
+    return patternParts.length === domainParts.length && patternParts.every((part, index) => part === '*' || part === domainParts[index]);
+  });
+}
+
+function applyHostsToProxies(proxies, hosts) {
+  if (!hosts || typeof hosts !== 'object') return proxies;
+
+  const hostEntries = Object.entries(hosts)
+    .filter(([, value]) => (typeof value === 'string' && value.length > 0) || (Array.isArray(value) && value.length > 0))
+    .sort((a, b) => hostSpecificity(b[0]) - hostSpecificity(a[0]));
+  if (!hostEntries.length) return proxies;
+
+  const targetOf = (value) => {
+    if (Array.isArray(value)) value = value.find((v) => typeof v === 'string' && v.length > 0);
+    return typeof value === 'string' && value.length > 0 ? value : null;
+  };
+
+  const resolveCache = new Map();
+  const resolve = (server) => {
+    const cached = resolveCache.get(server);
+    if (cached !== undefined) return cached;
+    const seen = new Set();
+    let current = server.toLowerCase();
+    let result = server;
+
+    while (!seen.has(current)) {
+      seen.add(current);
+      const entry = hostEntries.find(([pattern]) => matchDomainPattern(pattern, current));
+      const target = entry && targetOf(entry[1]);
+      if (!target) break;
+      result = target;
+      current = target.toLowerCase();
+    }
+
+    resolveCache.set(server, result);
+    return result;
+  };
+
+  return proxies.map((proxy) => {
+    if (typeof proxy.server !== 'string') return proxy;
+    const server = resolve(proxy.server);
+    return server === proxy.server ? proxy : { ...proxy, server };
+  });
+}
+
+function stripDnsSuffix(dns) {
+  const str = String(dns);
+  const hashIndex = str.indexOf('#');
+  if (hashIndex === -1) return str;
+  const prefix = str.slice(0, hashIndex).trim();
+  const suffix = str.slice(hashIndex + 1).toLowerCase().trim();
+  if (suffix.includes('direct') || suffix.includes('直连')) return `${prefix}#DIRECT`;
+  return prefix;
+}
+
+function isIpAddress(server) {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(server) || server.includes(':');
+}
+
+function simplifyDomainPolicy(policy) {
+  const groups = new Map();
+  for (const [domain, dns] of Object.entries(policy)) {
+    const dnsKey = JSON.stringify(Array.isArray(dns) ? [...dns].sort() : dns);
+    if (domain.startsWith('+.') || domain.startsWith('.') || domain.includes('*')) {
+      groups.set(`keep:${domain}`, [{ domain, dns, dnsKey }]);
+      continue;
+    }
+    const parts = domain.split('.');
+    if (parts.length < 3) {
+      groups.set(`keep:${domain}`, [{ domain, dns, dnsKey }]);
+      continue;
+    }
+    const suffix = parts.slice(-2).join('.');
+    if (!groups.has(suffix)) groups.set(suffix, []);
+    groups.get(suffix).push({ domain, dns, dnsKey });
+  }
+
+  const result = {};
+  for (const [suffix, domains] of groups) {
+    const firstDnsKey = domains[0].dnsKey;
+    const sameDns = domains.every(({ dnsKey }) => dnsKey === firstDnsKey);
+    if (domains.length >= 2 && sameDns) {
+      result[`+.${suffix}`] = domains[0].dns;
+    } else {
+      for (const { domain, dns } of domains) result[domain] = dns;
+    }
+  }
+  return result;
+}
 
 function buildDnsAndHostsConfig(config, filteredProxies) {
-  // 自建节点全部使用公网 IP 作为 server，不需要私有 DNS / Hosts 映射。
-  // 代理节点自身无需 proxy-server-nameserver。
+  const originalDnsConfig = config.dns || {};
+  const proxyServerNameservers = originalDnsConfig['proxy-server-nameserver'] || [];
+  const listenValue = originalDnsConfig['listen'];
+  const shouldRewriteByHosts =
+    proxyServerNameservers.length === 1 &&
+    typeof listenValue === 'string' &&
+    listenValue.length > 0 &&
+    (proxyServerNameservers.some((dns) => String(dns).toLowerCase().includes(listenValue.toLowerCase())) ||
+      (listenValue.includes('0.0.0.0') && proxyServerNameservers.some((dns) => String(dns).toLowerCase().includes('127.0.0.1'))));
+
+  const mappedProxies = shouldRewriteByHosts ? applyHostsToProxies(filteredProxies, config.hosts) : filteredProxies;
+  const proxyDomains = new Set(
+    mappedProxies
+      .filter((proxy) => typeof proxy.server === 'string')
+      .map((proxy) => proxy.server.toLowerCase())
+      .filter((server) => !isIpAddress(server)),
+  );
+
+  const privateProxyServerNameservers = shouldRewriteByHosts ? [] : proxyServerNameservers;
+
+  const isCommonDns = (dns) => {
+    const value = String(dns).trim().toLowerCase();
+    if (value === 'system' || value === 'system://') return true;
+    return commonDnsRegex.test(value);
+  };
+
+  const privateDNS = privateProxyServerNameservers.filter((dns) => !isCommonDns(dns));
+  const originalProxyPolicy =
+    originalDnsConfig['proxy-server-nameserver-policy'] && typeof originalDnsConfig['proxy-server-nameserver-policy'] === 'object'
+      ? originalDnsConfig['proxy-server-nameserver-policy']
+      : {};
+
+  const matchedProxyPolicy = {};
+  for (const [domain, dns] of Object.entries(originalProxyPolicy)) {
+    if (!matchDomainPattern(domain, proxyDomains)) continue;
+    const strippedDns = Array.isArray(dns) ? dns.map(stripDnsSuffix).filter(Boolean) : stripDnsSuffix(dns);
+    if (Array.isArray(strippedDns) && strippedDns.length === 0) continue;
+    matchedProxyPolicy[domain] = strippedDns;
+  }
+
+  if (privateDNS.length > 0 && Object.keys(matchedProxyPolicy).length === 0) {
+    for (const domain of proxyDomains) matchedProxyPolicy[domain] = privateDNS;
+  }
+
+  const matchedPolicyDomains = Object.keys(matchedProxyPolicy);
+  const proxyServerPolicy =
+    proxyDomains.size === matchedPolicyDomains.length && matchedPolicyDomains.every((domain) => proxyDomains.has(domain.toLowerCase()))
+      ? simplifyDomainPolicy(matchedProxyPolicy)
+      : matchedProxyPolicy;
+
+  const originalFakeIpFilter = originalDnsConfig['fake-ip-filter'] || [];
+  const proxyFakeIpFilter = originalFakeIpFilter.filter((pattern) => matchDomainPattern(String(pattern), proxyDomains));
+
   const dns = {
     enable: true,
-    ipv6: false,
+    ipv6: true,
     'use-hosts': true,
-    'use-system-hosts': true,
     'cache-algorithm': 'arc',
+    'use-system-hosts': true,
     'enhanced-mode': 'fake-ip',
     'fake-ip-range': '198.18.0.1/15',
+    'fake-ip-range6': '2001:2::1/48',
     'fake-ip-filter': [
       'rule-set:private',
       'rule-set:fakeip_filter',
       'rule-set:geolocation-cn',
       ...(ruleOptionsEnable.FCM ? ['rule-set:googlefcm'] : []),
+      ...proxyFakeIpFilter,
     ],
+    'proxy-server-nameserver': chinaDohDNS,
+    ...(Object.keys(proxyServerPolicy).length > 0 && { 'proxy-server-nameserver-policy': proxyServerPolicy }),
     'default-nameserver': chinaDohDNS,
     nameserver: foreignDNS,
-    'nameserver-policy': {
-      'rule-set:cn': chinaDNS,
-    },
-    'direct-nameserver': chinaDNS,
+    'nameserver-policy': { 'rule-set:cn': chinaDNS },
+    'direct-nameserver': ['system', ...chinaDNS],
   };
 
-  // 自建版不需要机场 Hosts，也不做 Hosts -> proxy.server 改写。
-  // 节点 server 全部是公网 IP，因此最终配置不注入任何自定义 Hosts。
-  // use-system-hosts 仍然保留，避免影响系统本身的本地 hosts 使用。
-  const hosts = {};
+  // MyClash 默认 Hosts + 机场原始 Hosts。
+  // 机场原始 Hosts 放在后面，发生同名冲突时优先保留机场自己的定义。
+  const myclashHosts = {
+    'cloudflare-dns.com': ['1.1.1.1', '1.0.0.1'],
+    'dns.google': ['8.8.8.8', '8.8.4.4'],
+    'services.googleapis.cn': 'services.googleapis.com',
+    '+.mcdn.bilivideo.com': ['0.0.0.0'],
+    '+.mcdn.bilivideo.cn': ['0.0.0.0'],
+    '+.edge.mountaintoys.cn': ['0.0.0.0'],
+    '+.h2.smtcdns.net': ['0.0.0.0'],
+  };
 
-  return { dns, hosts, proxies: filteredProxies };
+  const originalHosts =
+    config.hosts && typeof config.hosts === 'object' && !Array.isArray(config.hosts)
+      ? config.hosts
+      : {};
+
+  const hosts = { ...myclashHosts, ...originalHosts };
+
+  return { dns, hosts, proxies: mappedProxies };
 }
 
 // ==================== 代理组构建 ====================
-function buildFunctionalGroups(filteredProxies, customizeInfo) {
+function buildFunctionalGroups(filteredProxies, customizeInfo, config) {
   const finalRuleProviders = { ...baseRuleProviders };
   if (!ruleOptionsEnable.屏蔽国外QUIC) delete finalRuleProviders.cn_additional;
 
   const { customProxyNames = [], customGroup = null } = customizeInfo || {};
   const filteredProxyNames = filteredProxies.map((p) => p.name);
   const allProxyNames = [...customProxyNames, ...filteredProxyNames];
+  const proxyProviderNames = getProxyProviderNames(config);
+  const hasProviders = proxyProviderNames.length > 0;
 
-  // 唯一节点入口：只暴露节点本身，不套自动选择 / 地区组 / 倍率组
+  // 唯一节点入口：本地节点显式展开；若存在 proxy-providers，则同时纳入 provider 节点。
   const groups = [{
     ...nodeSelectGroup,
     proxies: allProxyNames,
+    ...(hasProviders && {
+      'include-all-providers': true,
+      'exclude-filter': excludeFilter.source,
+    }),
   }];
 
   // 保留直连策略组，但它不属于节点分类组
@@ -785,8 +983,6 @@ function buildFunctionalGroups(filteredProxies, customizeInfo) {
   const rules = [];
   const serviceGroupNames = [];
 
-  // 代理组排序：先放用户指定的核心组，再按 MyClash 服务分流顺序生成。
-  // 其中 FANZA / Steam / AI / EHentai 固定置于前面；其余服务按开关配置中的定义顺序。
   const preferredServiceOrder = [
     'FANZA',
     'Steam',
@@ -814,21 +1010,18 @@ function buildFunctionalGroups(filteredProxies, customizeInfo) {
     .map((name) => serviceConfigByName.get(name))
     .filter(Boolean);
 
-  // MyClash 的服务组按开关决定是否生成。普通服务仅引用「节点选择」，direct=true 的服务继续保留 MyClash 的「直连」能力。
   for (const svc of orderedServiceConfigs) {
     if (!ruleOptionsEnable[svc.name]) continue;
 
     rules.push(...(svc.rules || []));
-    Object.assign(finalRuleProviders, svc.providers || {});
 
-    // Steam 必须先于 games_cn，避免 steamserver.net 等下载服务器
-    // 被 games_cn 提前判定为直连。
+    // Steam 必须优先于 games_cn。否则 games_cn 中的 steamserver.net 等规则
+    // 会提前命中直连，导致 Steam 策略组（如香港/日本节点）失效。
     if (svc.name === 'Steam') {
       rules.push('RULE-SET,games_cn,直连');
-      if (finalRuleProviders.games_cn) {
-        // games_cn 已由 baseRuleProviders 提供，无需重复加入 provider。
-      }
     }
+
+    Object.assign(finalRuleProviders, svc.providers || {});
 
     if (svc.reject) {
       groups.push({
@@ -850,13 +1043,17 @@ function buildFunctionalGroups(filteredProxies, customizeInfo) {
         name: svc.name,
         icon: svc.icon,
         proxies: [...new Set(['节点选择', ...japaneseNodes])],
+        ...(hasProviders && {
+          'include-all-providers': true,
+          filter: '日本|jp|japan|🇯🇵',
+          'exclude-filter': excludeFilter.source,
+        }),
       });
       serviceGroupNames.push(svc.name);
       continue;
     }
 
-    // 普通分流组：保留「节点选择」作为总入口，同时把全部节点直接展开，
-    // 这样进入 YouTube / Google / AI / Steam 等组时，可以直接手动选择具体节点。
+    // 普通分流组：手动选择具体节点；存在 provider 时同时纳入 provider 节点。
     const serviceProxies = svc.direct
       ? ['节点选择', '直连', ...allProxyNames]
       : ['节点选择', ...allProxyNames];
@@ -866,12 +1063,15 @@ function buildFunctionalGroups(filteredProxies, customizeInfo) {
       name: svc.name,
       icon: svc.icon,
       proxies: [...new Set(serviceProxies)],
+      ...(hasProviders && {
+        'include-all-providers': true,
+        'exclude-filter': excludeFilter.source,
+      }),
       ...(svc.defaultSelected === '直连' && { 'default-selected': '直连' }),
     });
     serviceGroupNames.push(svc.name);
   }
 
-  // 防止关闭节点选择开关后出现悬空引用；正常情况下该开关建议保持 true。
   if (!ruleOptionsEnable.节点选择) {
     throw new Error('「节点选择」必须启用，否则服务分流组将失去唯一代理入口');
   }
@@ -890,13 +1090,16 @@ function buildFunctionalGroups(filteredProxies, customizeInfo) {
   if (chainGroup) groups.push(chainGroup);
   groups.push(directGroup);
 
-  // GLOBAL 模式只显示全部实际节点和直连，不显示服务分流组。
-  // 切换到「全局」后，可直接选择任意节点或直连。
+  // Bettbox 兼容：Bettbox 的规则模式界面会依据 GLOBAL 的可达策略组
+  // 构建可展示的分流策略组列表。这里必须把业务分流组挂到 GLOBAL，
+  // 否则 Bettbox 可能只显示「直连分流」，而 Clash Verge 仍能正常显示。
+  // 注意：这会让 GLOBAL 本身可以切换到业务分流组；这是 Bettbox 兼容所需的取舍。
   const globalGroup = {
     ...selectBaseOption,
     name: 'GLOBAL',
     proxies: [
-      ...allProxyNames,
+      ...serviceGroupNames,
+      '节点选择',
       ...(chainGroup ? [chainGroup.name] : []),
       '直连',
     ],
@@ -922,16 +1125,19 @@ function buildFunctionalGroups(filteredProxies, customizeInfo) {
 }
 
 // ==================== 主入口 ====================
-function main(config) {
-  const newConfig = {};
+function buildConfig(config, inheritOriginalConfig) {
+  // 继承版：保留机场所有未被脚本明确接管的顶层字段。
+  // 非继承版：只输出脚本明确管理的字段；但 proxy-providers 是节点来源的必要入口，因此若存在则保留。
+  const newConfig = inheritOriginalConfig ? { ...config } : {};
 
   const filteredProxies = filterAndNormalizeProxies(config);
   const customizeInfo = buildCustomizeGroups(filteredProxies);
-  const { customProxies, customGroup } = customizeInfo;
+  const { customProxies } = customizeInfo;
 
-  const { globalGroup, functionalGroups, functionalRules, finalRuleProviders } = buildFunctionalGroups(
+  const { functionalGroups, functionalRules, finalRuleProviders } = buildFunctionalGroups(
     filteredProxies,
     customizeInfo,
+    config,
   );
 
   const { dns, hosts, proxies: mappedProxies } = buildDnsAndHostsConfig(config, filteredProxies);
@@ -953,27 +1159,30 @@ function main(config) {
   newConfig['external-ui-url'] = 'https://github.com/Zephyruso/zashboard/releases/latest/download/dist.zip';
 
   newConfig.profile = {
+    ...(inheritOriginalConfig && config.profile && typeof config.profile === 'object' ? config.profile : {}),
     'store-selected': true,
     'store-fake-ip': true,
   };
 
-  newConfig.ntp = {
-    enable: false,
-  };
+  // 你的实际使用方式不依赖 Mihomo NTP。
+  newConfig.ntp = { enable: false };
 
-  newConfig.tun = {
-    enable: false,
-  };
+  // 你的实际使用方式不依赖 TUN；不再保留无效的 TUN 子参数。
+  newConfig.tun = { enable: false };
 
   newConfig.proxies = [...customProxies, ...mappedProxies, ...directProxies];
   newConfig['proxy-groups'] = functionalGroups;
   newConfig['rule-providers'] = finalRuleProviders;
 
+  // 非继承版仍保留 proxy-providers，否则 provider 型机场会直接丢失其节点来源。
+  if (!inheritOriginalConfig && hasProxyProviders(config)) {
+    newConfig['proxy-providers'] = config['proxy-providers'];
+  }
+
   newConfig.rules = [
     ...prefixRules,
     ...(ruleOptionsEnable.屏蔽国外QUIC ? blockForeignQuic : []),
     ...functionalRules,
-    // MyClash 原「默认代理」已取消，漏网的国外流量统一进入唯一节点入口。
     'RULE-SET,geolocation-!cn,节点选择',
     'RULE-SET,cn_ip,直连',
     'RULE-SET,private_ip,直连',
@@ -981,4 +1190,14 @@ function main(config) {
   ];
 
   return newConfig;
+}
+
+// 默认入口：继承机场原配置。
+function main(config) {
+  return buildConfig(config, true);
+}
+
+// 非继承版入口：若你的运行环境支持指定入口，可使用此函数。
+function mainWithoutInheritance(config) {
+  return buildConfig(config, false);
 }
