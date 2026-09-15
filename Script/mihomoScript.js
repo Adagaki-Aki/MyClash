@@ -1,10 +1,10 @@
 /**
- * MyClash 自建整合版
+ * MyClash 手动节点整合版
  *
  * 基于 AIsouler/MyClash 当前全量版 mihomoScript.js 的思路整合：
  * 1. 删除「手动选择 / 自动选择 / 负载均衡」三套基础节点组，并移除倍率识别/过滤逻辑
- * 2. 删除香港 / 日本 / 美国 / 新加坡 / 台湾省 / 低倍率 / 高倍率 / 其他节点等内置节点组
- * 3. 仅保留一个「节点选择」select 组，直接平铺全部过滤后的机场节点
+ * 2. 删除香港 / 日本 / 美国 / 新加坡 / 台湾省 / 其他节点等内置代理组，并彻底移除倍率识别与过滤逻辑
+ * 3. 仅保留一个「节点选择」select 组，直接平铺全部过滤后的节点
  * 4. 保留 MyClash 的服务分流体系与开关：FCM / YouTube / Google / AI / Microsoft /
  *    Apple / Telegram / Steam / TikTok / Instagram / Netflix / Twitter / Emby /
  *    PikPak / Spotify / Crypto / EHentai / AdBlock
