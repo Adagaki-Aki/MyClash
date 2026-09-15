@@ -3,8 +3,8 @@
  *
  * 基于 AIsouler/MyClash 当前全量版 mihomoScript.js 的思路整合：
  * 1. 删除「手动选择 / 自动选择 / 负载均衡」三套基础节点组
- * 2. 删除香港 / 日本 / 美国 / 新加坡 / 台湾省 / 其他节点等内置节点组
- * 3. 仅保留一个「节点选择」select 组，直接平铺全部过滤后的机场节点
+ * 2. 删除香港 / 日本 / 美国 / 新加坡 / 台湾省 / 其他节点等内置代理组
+ * 3. 仅保留一个「节点选择」select 组，直接平铺全部过滤后的机场节点；支持 proxy-providers
  * 4. 保留 MyClash 的服务分流体系与开关：FCM / YouTube / Google / AI / Microsoft /
  *    Apple / Telegram / Steam / TikTok / Instagram / Netflix / Twitter / Emby /
  *    PikPak / Spotify / Crypto / EHentai / AdBlock
@@ -14,7 +14,7 @@
  * 8. 保留 MyClash 的国内外规则、国外 QUIC 拦截及服务 Rule Providers
  *
  * 重要：本版不创建 url-test / load-balance，不做自动测速，不做自动故障转移。
- * 10. 默认关闭 TUN / NTP / LAN / IPv6，保留规则模式、节点选择持久化和本地 API。
+ * 9. 支持 proxy-providers；默认关闭 TUN / NTP / LAN / IPv6，保留规则模式、节点选择持久化和本地 API。
  */
 
 const Compatible_With_Bettbox = { ruleOptionsEnable: true };
@@ -1027,6 +1027,7 @@ function buildFunctionalGroups(filteredProxies, customizeInfo, config) {
     }
 
     if (svc.fanza) {
+      // 机场使用 proxy-providers 时，FANZA 同时通过 include-all-providers + filter 纳入日本节点。
       const japaneseNodes = filteredProxies
         .filter((proxy) => getMatchedRegions(proxy.name).some((region) => region.name === '日本'))
         .map((proxy) => proxy.name);
