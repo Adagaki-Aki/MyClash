@@ -3,7 +3,7 @@
  *
  * 基于 AIsouler/MyClash 当前全量版 mihomoScript.js 的思路整合：
  * 1. 删除「手动选择 / 自动选择 / 负载均衡」三套基础节点组
- * 2. 删除香港 / 日本 / 美国 / 新加坡 / 台湾省 / 低倍率 / 高倍率 / 其他节点等内置节点组
+ * 2. 删除香港 / 日本 / 美国 / 新加坡 / 台湾省 / 其他节点等内置节点组
  * 3. 仅保留一个「节点选择」select 组，直接平铺全部过滤后的机场节点
  * 4. 保留 MyClash 的服务分流体系与开关：FCM / YouTube / Google / AI / Microsoft /
  *    Apple / Telegram / Steam / TikTok / Instagram / Netflix / Twitter / Emby /
@@ -14,7 +14,6 @@
  * 8. 保留 MyClash 的国内外规则、国外 QUIC 拦截及服务 Rule Providers
  *
  * 重要：本版不创建 url-test / load-balance，不做自动测速，不做自动故障转移。
- * 9. 兼容 proxy-providers：存在代理提供器时，节点组通过 include-all-providers 纳入提供器节点。
  * 10. 默认关闭 TUN / NTP / LAN / IPv6，保留规则模式、节点选择持久化和本地 API。
  */
 
@@ -49,8 +48,6 @@ const ruleOptionsEnable = {
   FANZA: true,
 
   // MyClash 原有非分流功能
-  过滤低倍率节点: false,
-  过滤高倍率节点: false,
   过滤非地区节点: true,
   屏蔽国外QUIC: true,
   代理IPV4优先: false,
@@ -127,21 +124,6 @@ const regionDefinitions = [
   },
 ];
 
-const lowRateRegionName = '低倍率节点';
-const highRateRegionName = '高倍率节点';
-const rateRegionDefinitions = [
-  {
-    name: lowRateRegionName,
-    regex:
-      /^(?!.*(?:剩|期)).*(?:(?<!\d)0\.[0-5]|(?<=[ |｜丨∣┃\-‐–—−－﹣])0[*×✕✖⨯⨉x倍])|(?:(?<=[ |｜丨∣┃\-‐–—−－﹣])[*×✕✖⨯⨉x]0(?= |倍|$))|^(?!.*(?:客户端|软件)).*下载|低倍|免费|(?<![A-Za-z])free(?![A-Za-z])/i,
-  },
-  {
-    name: highRateRegionName,
-    regex:
-      /(?<=[ |｜丨∣┃\-‐–—−－﹣])((?:[*×✕✖⨯⨉x]\s*(?:[2-9]\d*|[1-9]\d+)(?:\.\d+)?)|(?:(?<![\d.])(?:[2-9]\d*|[1-9]\d+)(?:\.\d+)?\s*(?:倍|[*×✕✖⨯⨉x])))/i,
-  },
-];
-const allRegionDefinitions = [...regionDefinitions, ...rateRegionDefinitions];
 
 // ==================== Rule Providers 基础配置 ====================
 const ruleProviderCommonDomain = {
@@ -168,7 +150,7 @@ const baseRuleProviders = {
     ...ruleProviderCommonIpcidr,
     url: 'https://fastly.jsdelivr.net/gh/appshubcc/bett-rules@meta/geo/geoip/private.mrs',
     path: './ruleset/private_ip.mrs',
-    'path-in-bundle': 'geo/geoip/private_ip.mrs',
+    'path-in-bundle': 'geo/geoip/private.mrs',
   },
   games_cn: {
     ...ruleProviderCommonDomain,
@@ -335,10 +317,16 @@ const serviceConfigs = [
         path: './ruleset/microsoft.mrs',
         'path-in-bundle': 'geo/geosite/microsoft.mrs',
       },
+      microsoft_ip: {
+        ...ruleProviderCommonIpcidr,
+        url: 'https://fastly.jsdelivr.net/gh/appshubcc/bett-rules@meta/geo/geoip/microsoft.mrs',
+        path: './ruleset/microsoft_ip.mrs',
+        'path-in-bundle': 'geo/geoip/microsoft.mrs',
+      },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Microsoft.png',
-    // MyClash 原规则这里指向「默认代理」；整合版已改为唯一节点入口「节点选择」
-    rules: ['RULE-SET,github,节点选择', 'RULE-SET,microsoft,Microsoft'],
+    // GitHub 流量继续沿用唯一节点入口「节点选择」
+    rules: ['RULE-SET,github,节点选择', 'RULE-SET,microsoft,Microsoft', 'RULE-SET,microsoft_ip,Microsoft,no-resolve'],
   },
   {
     name: 'Apple',
@@ -350,9 +338,15 @@ const serviceConfigs = [
         path: './ruleset/apple.mrs',
         'path-in-bundle': 'geo/geosite/apple.mrs',
       },
+      apple_ip: {
+        ...ruleProviderCommonIpcidr,
+        url: 'https://fastly.jsdelivr.net/gh/appshubcc/bett-rules@meta/geo/geoip/apple.mrs',
+        path: './ruleset/apple_ip.mrs',
+        'path-in-bundle': 'geo/geoip/apple.mrs',
+      },
     },
     icon: 'https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Apple.png',
-    rules: ['RULE-SET,apple,Apple'],
+    rules: ['RULE-SET,apple,Apple', 'RULE-SET,apple_ip,Apple,no-resolve'],
   },
   {
     name: 'Telegram',
@@ -597,7 +591,7 @@ const regionMatchCache = new Map();
 
 function getMatchedRegions(proxyName) {
   if (regionMatchCache.has(proxyName)) return regionMatchCache.get(proxyName);
-  const regions = allRegionDefinitions.filter((region) => region.regex.test(proxyName));
+  const regions = regionDefinitions.filter((region) => region.regex.test(proxyName));
   regionMatchCache.set(proxyName, regions);
   return regions;
 }
@@ -636,18 +630,10 @@ function getIpVersionPreference() {
 function filterAndNormalizeProxies(config) {
   regionMatchCache.clear();
 
-  const lowRateRegex = ruleOptionsEnable.过滤低倍率节点
-    ? rateRegionDefinitions.find((r) => r.name === lowRateRegionName)?.regex
-    : null;
-  const highRateRegex = ruleOptionsEnable.过滤高倍率节点
-    ? rateRegionDefinitions.find((r) => r.name === highRateRegionName)?.regex
-    : null;
-
   const originalProxies = Array.isArray(config.proxies) ? config.proxies : [];
   const filteredRawProxies = originalProxies.filter((proxy) => {
     const type = String(proxy.type ?? '').toLowerCase();
     if (type === 'direct' || type === 'reject' || type === 'rematch') return false;
-    if (lowRateRegex?.test(proxy.name) || highRateRegex?.test(proxy.name)) return false;
 
     if (!ruleOptionsEnable.过滤非地区节点) return true;
     const isRegionProxy = getMatchedRegions(proxy.name).some((region) => regionDefinitions.includes(region));
@@ -725,12 +711,13 @@ const commonDnsList = [
   '2400:3200::1','2400:3200:baba::1','2402:4e00::','2400:da00::6666',
   '1.1.1.1','1.0.0.1','8.8.8.8','8.8.4.4','9.9.9.9','149.112.112.112','208.67.222.222','208.67.220.220','94.140.14.14','94.140.15.15','76.76.2.0','76.76.10.0','185.228.168.9','185.228.169.9','77.88.8.8','77.88.8.1','156.154.70.1','156.154.71.1',
   '2606:4700:4700::1111','2606:4700:4700::1001','2001:4860:4860::8888','2001:4860:4860::8844','2620:fe::fe','2620:fe::9','2620:119:35::35','2620:119:53::53','2a10:50c0::bad1:ff','2a10:50c0::bad2:ff','2a10:50c0::ad1:ff','2a10:50c0::ad2:ff','2a0d:2a00:1::2','2a0d:2a00:2::2','2a02:6b8::feed:0ff','2a02:6b8:0:1::feed:0ff','2610:a1:1018::1','2610:a1:1019::53',
-  'alidns','doh.pub','dot.pub','dns.pub','dnspod','dns.baidu','dns.google','dns.cloudflare','cloudflare-dns','quad9','opendns','nextdns','adguard',
+  'alidns','doh.pub','dot.pub','dns.pub','dnspod','dns.baidu','dns.google','dns.cloudflare','dns.apple','cloudflare-dns','quad9','opendns','nextdns','adguard','one.one.one.one',
 ];
 const commonDnsRegex = new RegExp(commonDnsList.map((dns) => dns.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i');
-const chinaDNS = ['223.5.5.5#DIRECT', '119.29.29.29#DIRECT'];
-const chinaDohDNS = ['https://223.5.5.5/dns-query#DIRECT', 'https://1.12.12.12/dns-query#DIRECT'];
+const chinaDNS = ['system', '223.5.5.5#DIRECT', '119.29.29.29#DIRECT'];
 const foreignDNS = ['https://cloudflare-dns.com/dns-query#节点选择', 'https://dns.google/dns-query#节点选择'];
+const defaultDNS = ['114.114.114.114#DIRECT', 'tls://223.5.5.5#DIRECT', 'https://1.12.12.12#DIRECT'];
+const proxyServerDNS = ['114.114.114.114#DIRECT', 'tls://223.5.5.5#DIRECT', 'https://doh.pub/dns-query#DIRECT'];
 
 function hostSpecificity(pattern) {
   if (pattern.startsWith('+.')) return 2;
@@ -877,16 +864,22 @@ function buildDnsAndHostsConfig(config, filteredProxies) {
     return commonDnsRegex.test(value);
   };
 
-  const privateDNS = privateProxyServerNameservers.filter((dns) => !isCommonDns(dns));
-  const originalProxyPolicy =
-    originalDnsConfig['proxy-server-nameserver-policy'] && typeof originalDnsConfig['proxy-server-nameserver-policy'] === 'object'
-      ? originalDnsConfig['proxy-server-nameserver-policy']
-      : {};
-
+  const privateDNS = [
+    ...new Set(
+      [...(originalDnsConfig['nameserver'] || []), ...privateProxyServerNameservers]
+        .map(stripDnsSuffix)
+        .filter((dns) => dns.length > 0 && !isCommonDns(dns)),
+    ),
+  ];
   const matchedProxyPolicy = {};
-  for (const [domain, dns] of Object.entries(originalProxyPolicy)) {
+  for (const [domain, dns] of Object.entries({
+    ...originalDnsConfig['nameserver-policy'],
+    ...originalDnsConfig['proxy-server-nameserver-policy'],
+  })) {
     if (!matchDomainPattern(domain, proxyDomains)) continue;
-    const strippedDns = Array.isArray(dns) ? dns.map(stripDnsSuffix).filter(Boolean) : stripDnsSuffix(dns);
+    const strippedDns = Array.isArray(dns)
+      ? dns.map(stripDnsSuffix).filter(Boolean)
+      : stripDnsSuffix(dns);
     if (Array.isArray(strippedDns) && strippedDns.length === 0) continue;
     matchedProxyPolicy[domain] = strippedDns;
   }
@@ -920,12 +913,12 @@ function buildDnsAndHostsConfig(config, filteredProxies) {
       ...(ruleOptionsEnable.FCM ? ['rule-set:googlefcm'] : []),
       ...proxyFakeIpFilter,
     ],
-    'proxy-server-nameserver': chinaDohDNS,
+    'default-nameserver': defaultDNS,
+    'proxy-server-nameserver': proxyServerDNS,
     ...(Object.keys(proxyServerPolicy).length > 0 && { 'proxy-server-nameserver-policy': proxyServerPolicy }),
-    'default-nameserver': chinaDohDNS,
     nameserver: foreignDNS,
     'nameserver-policy': { 'rule-set:cn': chinaDNS },
-    'direct-nameserver': ['system', ...chinaDNS],
+    'direct-nameserver': chinaDNS,
   };
 
   // MyClash 默认 Hosts + 机场原始 Hosts。
