@@ -1,5 +1,5 @@
 /**
- * MyClash 手动节点整合版
+ * MyClash 机场整合版
  *
  * 基于 AIsouler/MyClash 当前全量版 mihomoScript.js 的思路整合：
  * 1. 删除「手动选择 / 自动选择 / 负载均衡」三套基础节点组
